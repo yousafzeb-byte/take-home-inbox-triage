@@ -64,16 +64,17 @@ ENGINEERING_LOG.md     a one-page template — fill it in
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp env.example .env           # then fill in your ANTHROPIC_API_KEY
+cp env.example .env           # then fill in your own LLM API key (any provider)
 make serve                    # terminal 1 — starts the mock API on :8099
 make test                     # terminal 2 — the suite (red until you build the skill)
 ```
 
 ## Deliverables (submit all four)
 
-1. **Your repo** (zip, or a branch / PR link).
-2. **Your full AI session log(s)** — the Claude Code transcript or Cursor chat export.
-   This is the most important artifact; we read it closely.
+1. **A link to your GitHub repo.** Fork this repo, push your edits, and share the URL
+   with us. (Public, or private with us added as collaborators — your call.)
+2. **Your full AI session log(s)** — the Claude Code transcript or Cursor chat export,
+   committed into your repo. This is the most important artifact; we read it closely.
 3. **`ENGINEERING_LOG.md`**, filled in (one page).
 4. *(Optional)* a ≤3-minute screen recording walking us through it.
 
