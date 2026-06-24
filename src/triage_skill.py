@@ -1,13 +1,13 @@
 """Inbox Triage skill worker — STUB.
 
-This is where you work. The signatures below are the contract the test suite
-expects; keep them (you may add to them). Replace every `raise NotImplementedError`
-with a real implementation.
+This is where you work. The signatures below are a suggested starting shape —
+keep them, change them, or add to them as you see fit. Replace every
+`raise NotImplementedError` with a real implementation.
 
 You are free to choose how you classify emails (an LLM call is the obvious move —
 that's the point of the role), how you structure the human-in-the-loop gate, and
-how you wire the client. The acceptance criteria are in the README; the test suite
-encodes the non-negotiable parts.
+how you wire the client. The requirements are in the README; how you interpret and
+verify "done" is part of what we're looking at.
 """
 
 from __future__ import annotations

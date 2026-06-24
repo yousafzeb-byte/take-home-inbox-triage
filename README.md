@@ -6,14 +6,26 @@
 
 ## The rules
 
-- **Time cap: 2 hours.** Pick a single uninterrupted block. Start the clock when you open
-  this repo; stop at 2:00 even if you're unfinished. A clean, working *core* beats a
-  sprawling unfinished pile. We mean the cap — and we verify it against your session logs.
+- **Time cap: 2 hours.** Pick a single uninterrupted block. A clean, working *core* beats a
+  sprawling unfinished pile — and we mean the cap. (Suggested split below.)
 - **Use AI heavily.** This is the job. Cursor, Claude Code, whatever you run day-to-day.
   We are **not** testing whether you can hand-write Python. We're testing how well you
   *direct* AI to build correct, secure software under a deadline. Treat the AI like a team
   of engineers you're managing.
 - We explicitly do **not** penalize AI use. We reward *managed* AI use.
+- **"Done" is yours to define.** There's no hidden test suite grading you to a spec. We've
+  left room on purpose — show us your judgment about what matters and where to spend effort.
+
+## How to spend your two hours
+
+| Time | Focus |
+|---|---|
+| **~60 min** | **Build** the skill against the requirements below. |
+| **~30 min** | **Test / verify** it however you see fit — make sure it actually works. |
+| **~30 min** | **Wrap up the deliverables** — clean up the repo, fill in the engineering log, record your Loom. |
+
+Budget for the wrap-up; don't let it get squeezed. We care as much about how you finish and
+communicate as about the code itself.
 
 ## The scenario
 
@@ -21,9 +33,9 @@ A client — a small B2B company — wants an agent that triages their incoming 
 emails so a human never starts from a blank page. You're building the first skill worker.
 
 This repo is a scaffold: a mock REST API (inbox + outbound mail + CRM), email fixtures,
-env config, and a **stubbed skill module with a failing test suite**. Build the skill.
+env config, and a **stubbed skill module**. Build the skill.
 
-## Requirements (these are the acceptance criteria — build exactly these)
+## Requirements
 
 1. **Ingest** the incoming emails from the mock `GET /inbox` endpoint.
 2. **Classify** each email into exactly one of: `billing`, `bug_report`, `sales_lead`, `spam`.
@@ -42,8 +54,8 @@ env config, and a **stubbed skill module with a failing test suite**. Build the 
 5. **Least privilege & secrets.** The spam path must never hold write credentials. All
    tokens come from the environment — never hardcoded. The write scope is used only after
    approval.
-6. **Tests pass.** Make the provided suite green (`make test`), and add at least one
-   meaningful test of your own.
+6. **Verify your work.** How you prove it works — tests, a demo script, manual checks — is
+   up to you. We want to see how you build confidence in your own output.
 7. **README the client could read.** Append a short section below: what it does, how to
    run it, and the one design decision you're proudest of.
 
@@ -53,9 +65,8 @@ env config, and a **stubbed skill module with a failing test suite**. Build the 
 mock_api/server.py     FastAPI mock: /inbox, /mail/send, /crm/contact, /crm/deal
 fixtures/emails.json   the inbox the agent triages
 src/triage_skill.py    STUB — signatures + TODOs, no logic. This is where you work.
-tests/test_triage.py   failing suite that encodes the acceptance criteria
 env.example            the env vars you need (copy to .env)
-Makefile               `make serve` (run the API), `make test` (run the suite)
+Makefile               `make serve` (run the API), `make audit` (inspect side effects)
 ENGINEERING_LOG.md     a one-page template — fill it in
 ```
 
@@ -66,23 +77,23 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp env.example .env           # then fill in your own LLM API key (any provider)
 make serve                    # terminal 1 — starts the mock API on :8099
-make test                     # terminal 2 — the suite (red until you build the skill)
 ```
 
-## Deliverables (submit all four)
+## Deliverables (submit all three)
 
 1. **A link to your GitHub repo.** Fork this repo, push your edits, and share the URL
    with us. (Public, or private with us added as collaborators — your call.)
-2. **Your full AI session log(s)** — the Claude Code transcript or Cursor chat export,
-   committed into your repo. This is the most important artifact; we read it closely.
-3. **`ENGINEERING_LOG.md`**, filled in (one page).
-4. *(Optional)* a ≤3-minute screen recording walking us through it.
+2. **`ENGINEERING_LOG.md`**, filled in (one page) — how you directed the work.
+3. **A Loom recording (required, ≤5 min).** Walk us through what you built, demo it
+   running, and call out a decision or two you're proud of. This is where we see your
+   communication and how completely you finished — treat it like showing a client.
 
 ## How we evaluate
 
 We grade *how you managed the AI* as much as the result: did you decompose and delegate,
-review its output critically, catch its mistakes, make sound security calls, and scope
-ruthlessly to the deadline? The full rubric is shared with you after you submit.
+review its output critically, catch its mistakes, and make sound security calls? We also
+look at how you **interpreted an open-ended problem** and how clearly you **communicate**
+your work. The full rubric is shared with you after you submit.
 
 Questions before you start? Email us. Once you open the scaffold, the clock is yours.
 

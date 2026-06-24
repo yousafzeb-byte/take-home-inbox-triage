@@ -1,4 +1,4 @@
 [tool.pytest.ini_options]
-# Make `from src.triage_skill import ...` work without installing anything.
+# If you choose to write tests, this makes `from src.triage_skill import ...` work
+# without installing anything.
 pythonpath = ["."]
-testpaths = ["tests"]
