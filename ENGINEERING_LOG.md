@@ -18,7 +18,7 @@ Before writing a line of code I had the AI fetch five files in parallel — READ
 4. **Implement `classify_email`** — directed the AI to use Claude Haiku, constrain output to 20 tokens (single word), and — critically — treat the email body as untrusted content in the _human_ turn only, with the classification instruction locked in the _system_ prompt.
 5. **Implement `plan_actions`** — kept it pure/deterministic per the docstring; templates only, no LLM.
 6. **Implement `execute` and `triage_inbox`** — wired the HITL gate: `execute()` returns `None` immediately on `approved=False`, and spam emails produce zero `ProposedAction` objects so `execute()` is never called for them.
-7. **Write 30 tests** — covering routing correctness, HITL gate invariants, token-scoping, orchestration, and the prompt injection case (e-007).
+7. **Write 32 tests** — covering routing correctness, HITL gate invariants, token-scoping, orchestration, the prompt injection case (e-007), and two new tests added after the security review: `test_approved_without_write_token_raises` and `test_requires_write_false_raises_before_dispatch`.
 
 ## Where I ran things in parallel
 
