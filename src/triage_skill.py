@@ -393,6 +393,16 @@ def _stdin_approver(email: dict, action: ProposedAction) -> bool:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Inbox Triage Agent")
+    parser.add_argument(
+        "--yes", "-y",
+        action="store_true",
+        help="Auto-approve all proposed actions (useful for demos).",
+    )
+    args = parser.parse_args()
+
     base_url = os.environ.get("API_BASE_URL", "http://127.0.0.1:8099")
     read_token = os.environ["READ_TOKEN"]
     write_token = os.environ["WRITE_TOKEN"]
@@ -403,10 +413,16 @@ if __name__ == "__main__":
     # the write path is never reached for spam emails.
     client = TriageClient(base_url, read_token=read_token, write_token=write_token)
 
+    if args.yes:
+        print("⚠  Auto-approve mode — all proposed actions will be executed.")
+        approver = lambda email, action: True
+    else:
+        approver = _stdin_approver
+
     print(f"Inbox Triage Agent — API: {base_url}")
     print("=" * 60)
 
-    results = triage_inbox(client, approver=_stdin_approver)
+    results = triage_inbox(client, approver=approver)
 
     print(f"\n{'=' * 60}")
     print("TRIAGE COMPLETE")
