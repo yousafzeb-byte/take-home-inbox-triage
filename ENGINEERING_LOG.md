@@ -46,17 +46,16 @@ This is a classic prompt injection vector: any email containing instructions lik
 
 ## The design decision I'm proudest of
 
-**The two-layer least-privilege + HITL design.**
+**Genuine two-layer least-privilege + HITL, after catching my own architectural lie.**
 
-Layer 1 — _structural_: `TriageClient._write_headers()` raises `PermissionError` if `write_token` is `None`. A read-only client literally cannot write, regardless of what code calls it. This means the classifier and planner are given a client that is physically incapable of writing anything.
+My first implementation described a "two-layer" design but only delivered one real layer. The `__main__` block constructed `TriageClient` with both tokens upfront, which made `_write_headers()`'s `PermissionError` check dead code — it could never fire because the write token was always present. The actual enforcement was entirely behavioural: `plan_actions` emitting no actions for spam, and `execute()` gating on `approved`. One layer, not two.
 
-Layer 2 — _gate_: `execute()` is the single chokepoint for all external writes. Its first action is:
+On review I caught this and fixed it before submitting:
 
-```python
-if not approved:
-    return None
-```
+**Layer 1 — gate (behavioural):** `execute()` returns `None` immediately on `approved=False`. One line, no branches.
 
-No branching, no special cases — unapproved means nothing happens, full stop.
+**Layer 2 — structural:** `__main__` now constructs a read-only client (`write_token=None`). The write token is passed as a bare string through `triage_inbox()` to `execute()`, where a write-capable `TriageClient` is constructed **only after the approval gate passes**. Before that moment, no object in the call stack holds write capability — `_write_headers()` on the read client genuinely raises `PermissionError`. The spam path never reaches `execute()`, so the write token is never even passed to it for spam emails.
 
-Combined effect: the spam path never generates `ProposedAction` objects, so `execute()` is never called for spam emails. Even if a future bug generated a spam action, the gate would catch it. And even if the gate were somehow bypassed, the client without a write token would raise before touching any endpoint. Two independent layers, both covered by tests.
+`requires_write=True` on every `ProposedAction` is now also load-bearing: `execute()` asserts it before dispatch, so a misconfigured action is caught at the boundary rather than silently proceeding.
+
+The self-review that caught the original gap — and the fix — is the decision I'm proudest of.

@@ -156,52 +156,75 @@ class TestExecute:
     def test_declined_returns_none(self):
         client = _make_client()
         action = self._make_action()
-        result = execute(action, client, approved=False)
+        result = execute(action, client, approved=False, write_token="write-tok")
         assert result is None
 
     def test_declined_never_calls_client(self):
         client = MagicMock(spec=TriageClient)
         action = self._make_action()
-        execute(action, client, approved=False)
+        execute(action, client, approved=False, write_token="write-tok")
         client.send_reply.assert_not_called()
         client.send_alert.assert_not_called()
         client.create_lead.assert_not_called()
 
     def test_approved_calls_send_reply(self):
-        client = MagicMock(spec=TriageClient)
-        client.send_reply.return_value = {"status": "sent", "id": "mail-1"}
+        read_client = TriageClient("http://localhost:8099", read_token="r", write_token=None)
         action = self._make_action("send_reply")
-        result = execute(action, client, approved=True)
-        client.send_reply.assert_called_once()
+        with patch("src.triage_skill.TriageClient") as MockClient:
+            mock_write = MagicMock()
+            mock_write.send_reply.return_value = {"status": "sent", "id": "mail-1"}
+            MockClient.return_value = mock_write
+            result = execute(action, read_client, approved=True, write_token="write-tok")
+        mock_write.send_reply.assert_called_once()
         assert result is not None
 
     def test_approved_calls_send_alert(self):
-        client = MagicMock(spec=TriageClient)
-        client.send_alert.return_value = {"status": "posted", "id": "alert-1"}
+        read_client = TriageClient("http://localhost:8099", read_token="r", write_token=None)
         action = ProposedAction(
             kind="send_alert",
             payload={"channel": "#engineering", "message": "Bug found"},
         )
-        result = execute(action, client, approved=True)
-        client.send_alert.assert_called_once_with(channel="#engineering", message="Bug found")
+        with patch("src.triage_skill.TriageClient") as MockClient:
+            mock_write = MagicMock()
+            mock_write.send_alert.return_value = {"status": "posted", "id": "alert-1"}
+            MockClient.return_value = mock_write
+            result = execute(action, read_client, approved=True, write_token="write-tok")
+        mock_write.send_alert.assert_called_once_with(channel="#engineering", message="Bug found")
         assert result is not None
 
     def test_approved_calls_create_lead(self):
-        client = MagicMock(spec=TriageClient)
-        client.create_lead.return_value = {"status": "created", "id": "lead-1"}
+        read_client = TriageClient("http://localhost:8099", read_token="r", write_token=None)
         action = ProposedAction(
             kind="create_lead",
             payload={"name": "Priya N", "email": "priya@example.com", "company": "Northwind", "summary": "Pilot inquiry"},
         )
-        result = execute(action, client, approved=True)
-        client.create_lead.assert_called_once()
+        with patch("src.triage_skill.TriageClient") as MockClient:
+            mock_write = MagicMock()
+            mock_write.create_lead.return_value = {"status": "created", "id": "lead-1"}
+            MockClient.return_value = mock_write
+            result = execute(action, read_client, approved=True, write_token="write-tok")
+        mock_write.create_lead.assert_called_once()
         assert result is not None
 
     def test_unknown_kind_raises(self):
-        client = MagicMock(spec=TriageClient)
+        read_client = TriageClient("http://localhost:8099", read_token="r", write_token=None)
         action = ProposedAction(kind="unknown_action", payload={})
         with pytest.raises(ValueError, match="Unknown action kind"):
-            execute(action, client, approved=True)
+            execute(action, read_client, approved=True, write_token="write-tok")
+
+    def test_approved_without_write_token_raises(self):
+        """Structural layer: approving without a write token must raise."""
+        read_client = TriageClient("http://localhost:8099", read_token="r", write_token=None)
+        action = self._make_action("send_reply")
+        with pytest.raises(PermissionError):
+            execute(action, read_client, approved=True, write_token=None)
+
+    def test_requires_write_false_raises_before_dispatch(self):
+        """requires_write=False must raise before any client call."""
+        read_client = TriageClient("http://localhost:8099", read_token="r", write_token=None)
+        action = ProposedAction(kind="send_reply", payload={}, requires_write=False)
+        with pytest.raises(ValueError, match="requires_write=False"):
+            execute(action, read_client, approved=True, write_token="write-tok")
 
 
 # ---------------------------------------------------------------------------
@@ -236,9 +259,10 @@ class TestTriageInbox:
     def test_returns_one_result_per_email(self):
         emails = self._build_emails()
         client = MagicMock(spec=TriageClient)
+        client._base_url = "http://localhost:8099"
+        client._read_token = "read-tok"
         client.get_inbox.return_value = emails
 
-        # Classifier cycle through labels matching our fixtures
         label_map = {e["id"]: label for label, e in SAMPLE_EMAILS.items()}
         def fake_classifier(email):
             return label_map[email["id"]]
@@ -248,7 +272,9 @@ class TestTriageInbox:
         client.send_alert.return_value = {"status": "posted"}
         client.create_lead.return_value = {"status": "created"}
 
-        results = triage_inbox(client, approver=approve_all, classifier=fake_classifier)
+        with patch("src.triage_skill.TriageClient") as MockWriteClient:
+            MockWriteClient.return_value = client
+            results = triage_inbox(client, approver=approve_all, classifier=fake_classifier, write_token="w")
         assert len(results) == len(emails)
 
     def test_spam_email_produces_no_executed_actions(self):
@@ -257,8 +283,9 @@ class TestTriageInbox:
 
         results = triage_inbox(
             client,
-            approver=lambda e, a: True,  # would approve anything
+            approver=lambda e, a: True,
             classifier=lambda e: "spam",
+            write_token="w",
         )
         assert results[0].label == "spam"
         assert results[0].actions == []
@@ -272,8 +299,9 @@ class TestTriageInbox:
 
         results = triage_inbox(
             client,
-            approver=lambda e, a: False,   # decline everything
+            approver=lambda e, a: False,
             classifier=lambda e: "billing",
+            write_token="w",
         )
         assert results[0].label == "billing"
         assert results[0].actions == []
@@ -281,43 +309,58 @@ class TestTriageInbox:
 
     def test_approved_billing_calls_send_reply(self):
         client = MagicMock(spec=TriageClient)
+        client._base_url = "http://localhost:8099"
+        client._read_token = "read-tok"
         client.get_inbox.return_value = [SAMPLE_EMAILS["billing"]]
         client.send_reply.return_value = {"status": "sent", "id": "mail-1"}
 
-        results = triage_inbox(
-            client,
-            approver=lambda e, a: True,
-            classifier=lambda e: "billing",
-        )
+        with patch("src.triage_skill.TriageClient") as MockWriteClient:
+            MockWriteClient.return_value = client
+            results = triage_inbox(
+                client,
+                approver=lambda e, a: True,
+                classifier=lambda e: "billing",
+                write_token="w",
+            )
         client.send_reply.assert_called_once()
         assert results[0].label == "billing"
         assert len(results[0].actions) == 1
 
     def test_approved_bug_report_calls_send_alert_to_engineering(self):
         client = MagicMock(spec=TriageClient)
+        client._base_url = "http://localhost:8099"
+        client._read_token = "read-tok"
         client.get_inbox.return_value = [SAMPLE_EMAILS["bug_report"]]
         client.send_alert.return_value = {"status": "posted", "id": "alert-1"}
 
-        triage_inbox(
-            client,
-            approver=lambda e, a: True,
-            classifier=lambda e: "bug_report",
-        )
+        with patch("src.triage_skill.TriageClient") as MockWriteClient:
+            MockWriteClient.return_value = client
+            triage_inbox(
+                client,
+                approver=lambda e, a: True,
+                classifier=lambda e: "bug_report",
+                write_token="w",
+            )
         client.send_alert.assert_called_once()
         call_kwargs = client.send_alert.call_args.kwargs
         assert call_kwargs["channel"] == "#engineering"
 
     def test_approved_sales_lead_calls_reply_and_create_lead(self):
         client = MagicMock(spec=TriageClient)
+        client._base_url = "http://localhost:8099"
+        client._read_token = "read-tok"
         client.get_inbox.return_value = [SAMPLE_EMAILS["sales_lead"]]
         client.send_reply.return_value = {"status": "sent", "id": "mail-1"}
         client.create_lead.return_value = {"status": "created", "id": "lead-1"}
 
-        triage_inbox(
-            client,
-            approver=lambda e, a: True,
-            classifier=lambda e: "sales_lead",
-        )
+        with patch("src.triage_skill.TriageClient") as MockWriteClient:
+            MockWriteClient.return_value = client
+            triage_inbox(
+                client,
+                approver=lambda e, a: True,
+                classifier=lambda e: "sales_lead",
+                write_token="w",
+            )
         client.send_reply.assert_called_once()
         client.create_lead.assert_called_once()
 
@@ -351,6 +394,7 @@ class TestPromptInjection:
             client,
             approver=lambda e, a: True,
             classifier=lambda e: "spam",  # expected real-model output
+            write_token="w",
         )
         assert results[0].label == "spam"
         assert results[0].actions == []

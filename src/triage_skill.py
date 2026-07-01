@@ -179,6 +179,10 @@ def classify_email(email: dict) -> str:
         messages=[{"role": "user", "content": user_message}],
     )
 
+    if not message.content:
+        logger.warning("Empty response from LLM for email %s — defaulting to 'spam'", email.get("id"))
+        return "spam"
+
     raw = message.content[0].text.strip().lower()
 
     if raw not in LABELS:
@@ -294,20 +298,46 @@ def plan_actions(label: str, email: dict) -> list[ProposedAction]:
 # Execution (human-in-the-loop gate)
 # ---------------------------------------------------------------------------
 
-def execute(action: ProposedAction, client: TriageClient, *, approved: bool) -> dict | None:
+def execute(
+    action: ProposedAction,
+    read_client: TriageClient,
+    *,
+    approved: bool,
+    write_token: str | None = None,
+) -> dict | None:
     """Execute a single proposed action — but ONLY if a human approved it.
 
-    This is the human-in-the-loop gate. If `approved` is False, NOTHING external
-    happens: returns None immediately without touching the client.
+    Gate 1 (behavioural): returns None immediately if approved=False — the
+    write token is never touched.
+
+    Gate 2 (structural): the write-capable TriageClient is constructed INSIDE
+    this function, AFTER the approval check. Before that point no object in
+    the call stack holds a write-capable client; read_client cannot write
+    (its _write_headers() raises PermissionError). This makes the PermissionError
+    path genuinely load-bearing rather than decorative.
     """
     if not approved:
         logger.info("  ✗ Action '%s' declined — skipped.", action.kind)
         return None
 
+    if not action.requires_write:
+        raise ValueError(
+            f"Action {action.kind!r} reached execute() with requires_write=False — "
+            "only write-scoped actions should be dispatched here."
+        )
+
+    if write_token is None:
+        raise PermissionError(
+            "No write token available — cannot execute approved action without write scope."
+        )
+
+    # Write-capable client constructed HERE — only after both gates pass.
+    write_client = TriageClient(read_client._base_url, read_client._read_token, write_token)
+
     _dispatch = {
-        "send_reply":  client.send_reply,
-        "send_alert":  client.send_alert,
-        "create_lead": client.create_lead,
+        "send_reply":  write_client.send_reply,
+        "send_alert":  write_client.send_alert,
+        "create_lead": write_client.create_lead,
     }
 
     fn = _dispatch.get(action.kind)
@@ -324,9 +354,18 @@ def execute(action: ProposedAction, client: TriageClient, *, approved: bool) -> 
 # ---------------------------------------------------------------------------
 
 def triage_inbox(
-    client: TriageClient, approver, classifier=classify_email
+    client: TriageClient,
+    approver,
+    classifier=classify_email,
+    *,
+    write_token: str | None = None,
 ) -> list[TriageResult]:
     """Orchestrate the whole run: fetch → classify → plan → approve → execute.
+
+    `client` is a READ-ONLY client (no write token). It is used for get_inbox()
+    and passed to execute() as the read_client. The write_token is threaded
+    separately and only ever materialises into a write-capable TriageClient
+    inside execute(), after the human-approval gate has passed.
 
     `approver` is a callable: `approver(email, action) -> bool`. In production
     this surfaces a human-in-the-loop card; in tests it is a stub.
@@ -356,7 +395,7 @@ def triage_inbox(
 
         for action in proposed:
             approved = approver(email, action)
-            outcome = execute(action, client, approved=approved)
+            outcome = execute(action, client, approved=approved, write_token=write_token)
             if outcome is not None:
                 executed.append(action)
 
@@ -407,11 +446,11 @@ if __name__ == "__main__":
     read_token = os.environ["READ_TOKEN"]
     write_token = os.environ["WRITE_TOKEN"]
 
-    # Both tokens are loaded from env — never hardcoded.
-    # The write token is held by the client but execute() hard-gates on human
-    # approval before it is ever used. The spam path produces no actions, so
-    # the write path is never reached for spam emails.
-    client = TriageClient(base_url, read_token=read_token, write_token=write_token)
+    # read_client has NO write token — _write_headers() raises PermissionError
+    # if anything tries to call a write method on it directly (layer 2, structural).
+    # write_token is passed separately to triage_inbox and only materialises into
+    # a write-capable client inside execute(), AFTER human approval (layer 1, gate).
+    read_client = TriageClient(base_url, read_token=read_token)
 
     if args.yes:
         print("⚠  Auto-approve mode — all proposed actions will be executed.")
@@ -422,7 +461,7 @@ if __name__ == "__main__":
     print(f"Inbox Triage Agent — API: {base_url}")
     print("=" * 60)
 
-    results = triage_inbox(client, approver=approver)
+    results = triage_inbox(read_client, approver=approver, write_token=write_token)
 
     print(f"\n{'=' * 60}")
     print("TRIAGE COMPLETE")
