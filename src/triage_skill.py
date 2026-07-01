@@ -173,7 +173,7 @@ def classify_email(email: dict) -> str:
     )
 
     message = client.messages.create(
-        model="claude-3-5-haiku-20241022",
+        model="claude-haiku-4-5",
         max_tokens=20,
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],
